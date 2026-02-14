@@ -25,9 +25,12 @@ const configuredOrigins = (
 
 const privateDevOriginPattern =
   /^https?:\/\/(localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(:\d+)?$/;
+const vercelOriginPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
 
 const isAllowedOrigin = (origin) =>
-  configuredOrigins.includes(origin) || privateDevOriginPattern.test(origin);
+  configuredOrigins.includes(origin) ||
+  privateDevOriginPattern.test(origin) ||
+  vercelOriginPattern.test(origin);
 
 const redactMongoUri = (uri) => uri.replace(/\/\/([^@]+)@/, "//***:***@");
 
@@ -57,6 +60,9 @@ app.use("/api/contact", contactRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled server error:", err);
+  if (typeof err?.message === "string" && err.message.startsWith("CORS blocked")) {
+    return res.status(403).json({ message: err.message });
+  }
   res.status(500).json({ message: "Internal server error" });
 });
 

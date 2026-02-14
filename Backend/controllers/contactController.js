@@ -77,6 +77,9 @@ export const sendContactMessage = async (req, res) => {
       host,
       port,
       secure,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
         user,
         pass,
@@ -88,6 +91,7 @@ export const sendContactMessage = async (req, res) => {
     const safeSubject = escapeHtml(subject);
     const safeMessage = escapeHtml(message).replace(/\n/g, "<br />");
 
+    await transporter.verify();
     await transporter.sendMail({
       from: `Furnito Contact <${fromEmail}>`,
       to: toEmail,
@@ -114,6 +118,17 @@ export const sendContactMessage = async (req, res) => {
     return res.status(200).json({ message: "Message sent successfully." });
   } catch (error) {
     console.error("sendContactMessage error:", error);
+    const code = String(error?.code || "").toUpperCase();
+    if (code === "EAUTH") {
+      return res
+        .status(502)
+        .json({ message: "SMTP authentication failed. Check SMTP_USER/SMTP_PASS." });
+    }
+    if (code === "ESOCKET" || code === "ETIMEDOUT" || code === "ECONNECTION") {
+      return res
+        .status(502)
+        .json({ message: "SMTP server connection failed. Check SMTP_HOST/SMTP_PORT/SMTP_SECURE." });
+    }
     return res.status(500).json({ message: "Unable to send message right now." });
   }
 };
