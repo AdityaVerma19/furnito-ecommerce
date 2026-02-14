@@ -39,9 +39,8 @@ const getInitialTheme = () => {
     return storedTheme;
   }
 
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+  // Default first load to light theme.
+  return "light";
 };
 
 export default function App() {
