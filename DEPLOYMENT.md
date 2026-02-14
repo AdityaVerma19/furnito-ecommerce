@@ -33,6 +33,11 @@ Required:
 - `CONTACT_TO_EMAIL`
 - `CONTACT_FROM_EMAIL`
 
+Recommended for Render Free (SMTP ports are restricted on free services):
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+Use `CONTACT_TO_EMAIL` as destination mailbox.
+
 Optional:
 - `CLIENT_URL` (single frontend URL fallback)
 - `GOOGLE_CLIENT_ID` (required only if Google login is used)

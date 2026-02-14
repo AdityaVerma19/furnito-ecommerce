@@ -40,7 +40,64 @@ const getContactEmailConfig = () => {
     fromEmail:
       String(process.env.CONTACT_FROM_EMAIL || "").trim() ||
       String(process.env.SMTP_USER || "").trim(),
+    resendApiKey: String(process.env.RESEND_API_KEY || "").trim(),
+    resendFromEmail:
+      String(process.env.RESEND_FROM_EMAIL || "").trim() ||
+      String(process.env.CONTACT_FROM_EMAIL || "").trim(),
   };
+};
+
+const sendViaResend = async ({
+  apiKey,
+  fromEmail,
+  toEmail,
+  name,
+  email,
+  subject,
+  message,
+  safeName,
+  safeEmail,
+  safeSubject,
+  safeMessage,
+}) => {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      from: `Furnito Contact <${fromEmail}>`,
+      to: [toEmail],
+      subject: `[Furnito Contact] ${subject}`,
+      replyTo: email,
+      text: [
+        "New contact form submission",
+        `Name: ${name}`,
+        `Email: ${email}`,
+        `Subject: ${subject}`,
+        "",
+        "Message:",
+        message,
+      ].join("\n"),
+      html: `
+        <h2>New Contact Form Submission</h2>
+        <p><strong>Name:</strong> ${safeName}</p>
+        <p><strong>Email:</strong> ${safeEmail}</p>
+        <p><strong>Subject:</strong> ${safeSubject}</p>
+        <p><strong>Message:</strong><br />${safeMessage}</p>
+      `,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const reason =
+      payload?.message ||
+      payload?.error?.message ||
+      "Resend API request failed.";
+    throw Object.assign(new Error(reason), { code: "RESEND_ERROR" });
+  }
 };
 
 export const sendContactMessage = async (req, res) => {
@@ -63,13 +120,53 @@ export const sendContactMessage = async (req, res) => {
       return res.status(400).json({ message: "Message must be at least 10 characters." });
     }
 
-    const { host, port, secure, user, pass, toEmail, fromEmail } =
+    const {
+      host,
+      port,
+      secure,
+      user,
+      pass,
+      toEmail,
+      fromEmail,
+      resendApiKey,
+      resendFromEmail,
+    } =
       getContactEmailConfig();
+
+    const safeName = escapeHtml(name);
+    const safeEmail = escapeHtml(email);
+    const safeSubject = escapeHtml(subject);
+    const safeMessage = escapeHtml(message).replace(/\n/g, "<br />");
+
+    if (resendApiKey) {
+      if (!resendFromEmail || !toEmail) {
+        return res.status(500).json({
+          message:
+            "Resend is configured, but RESEND_FROM_EMAIL or CONTACT_TO_EMAIL is missing.",
+        });
+      }
+
+      await sendViaResend({
+        apiKey: resendApiKey,
+        fromEmail: resendFromEmail,
+        toEmail,
+        name,
+        email,
+        subject,
+        message,
+        safeName,
+        safeEmail,
+        safeSubject,
+        safeMessage,
+      });
+
+      return res.status(200).json({ message: "Message sent successfully." });
+    }
 
     if (!host || !port || !user || !pass || !toEmail || !fromEmail) {
       return res.status(500).json({
         message:
-          "Contact email is not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and CONTACT_TO_EMAIL in Backend/.env",
+          "Contact email is not configured. Add RESEND_API_KEY + RESEND_FROM_EMAIL (recommended), or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and CONTACT_TO_EMAIL in Backend/.env",
       });
     }
 
@@ -85,11 +182,6 @@ export const sendContactMessage = async (req, res) => {
         pass,
       },
     });
-
-    const safeName = escapeHtml(name);
-    const safeEmail = escapeHtml(email);
-    const safeSubject = escapeHtml(subject);
-    const safeMessage = escapeHtml(message).replace(/\n/g, "<br />");
 
     await transporter.verify();
     await transporter.sendMail({
